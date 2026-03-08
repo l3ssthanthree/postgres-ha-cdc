@@ -1,0 +1,148 @@
+Table users {
+  id integer [pk, increment]
+  full_name varchar [not null]
+  email varchar [not null, unique]
+  phone varchar [not null]
+  created_at timestamp [not null]
+}
+
+Table addresses {
+  id integer [pk, increment]
+  user_id integer [not null]
+  city varchar [not null]
+  street varchar [not null]
+  postal_code varchar [not null]
+}
+
+Table suppliers {
+  id integer [pk, increment]
+  name varchar [not null]
+  contact_phone varchar [not null]
+  created_at timestamp [not null]
+}
+
+Table categories {
+  id integer [pk, increment]
+  name varchar [not null, unique]
+}
+
+Table products {
+  id integer [pk, increment]
+  category_id integer [not null]
+  name varchar [not null]
+  description text
+  unit varchar [not null]
+  created_at timestamp [not null]
+}
+
+Table supplier_products {
+  id integer [pk, increment]
+  supplier_id integer [not null]
+  product_id integer [not null]
+  purchase_price numeric(10,2) [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (supplier_id, product_id) [unique]
+  }
+}
+
+Table product_price_history {
+  id integer [pk, increment]
+  product_id integer [not null]
+  price numeric(10,2) [not null]
+  created_at timestamp [not null]
+}
+
+Table warehouses {
+  id integer [pk, increment]
+  name varchar [not null, unique]
+}
+
+Table warehouse_stock {
+  id integer [pk, increment]
+  warehouse_id integer [not null]
+  product_id integer [not null]
+  qty_available integer [not null]
+
+  indexes {
+    (warehouse_id, product_id) [unique]
+  }
+}
+
+Table supplier_stock {
+  id integer [pk, increment]
+  supplier_product_id integer [not null, unique]
+  qty_available integer [not null]
+  updated_at timestamp [not null]
+}
+
+Table order_statuses {
+  id integer [pk, increment]
+  name varchar [not null, unique]
+}
+
+Table orders {
+  id integer [pk, increment]
+  user_id integer [not null]
+  status_id integer [not null]
+  created_at timestamp [not null]
+}
+
+Table order_items {
+  id integer [pk, increment]
+  order_id integer [not null]
+  product_id integer [not null]
+  quantity integer [not null]
+  sale_price_at_purchase numeric(10,2) [not null]
+}
+
+Table payment_statuses {
+  id integer [pk, increment]
+  name varchar [not null, unique]
+}
+
+Table payments {
+  id integer [pk, increment]
+  order_id integer [not null]
+  status_id integer [not null]
+  amount numeric(10,2) [not null]
+  paid_at timestamp
+}
+
+Table delivery_statuses {
+  id integer [pk, increment]
+  name varchar [not null, unique]
+}
+
+Table deliveries {
+  id integer [pk, increment]
+  order_id integer [not null]
+  address_id integer [not null]
+  status_id integer [not null]
+}
+
+Ref: "products"."category_id" > "categories"."id"
+
+Ref: "supplier_products"."supplier_id" > "suppliers"."id"
+Ref: "supplier_products"."product_id" > "products"."id"
+
+Ref: "product_price_history"."product_id" > "products"."id"
+
+Ref: "supplier_stock"."supplier_product_id" > "supplier_products"."id"
+
+Ref: "warehouse_stock"."product_id" > "products"."id"
+Ref: "warehouse_stock"."warehouse_id" > "warehouses"."id"
+
+Ref: "orders"."user_id" > "users"."id"
+Ref: "orders"."status_id" > "order_statuses"."id"
+
+Ref: "order_items"."order_id" > "orders"."id"
+Ref: "order_items"."product_id" > "products"."id"
+
+Ref: "payments"."order_id" > "orders"."id"
+Ref: "payments"."status_id" > "payment_statuses"."id"
+
+Ref: "deliveries"."order_id" > "orders"."id"
+Ref: "deliveries"."address_id" > "addresses"."id"
+Ref: "deliveries"."status_id" > "delivery_statuses"."id"
