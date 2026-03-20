@@ -21,4 +21,6 @@ RUN chmod +x /app/scripts/entrypoint.sh \
     /app/scripts/ci-down-one.sh \
     /app/scripts/seed.sh
 
+RUN chmod +x /app/scripts/*.sh
+
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
