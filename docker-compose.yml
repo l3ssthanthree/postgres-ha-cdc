@@ -9,18 +9,77 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./scripts/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+      - ./scripts/init-metrics-user.sh:/docker-entrypoint-initdb.d/init-metrics-user.sh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   migrator:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: fruits_migrator
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
       - ./migrations:/app/migrations
       - ./scripts:/app/scripts
+    restart: "no"
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: fruits_postgres_exporter
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATA_SOURCE_URI: "db:5432/postgres?sslmode=disable"
+      DATA_SOURCE_USER: "${METRICS_DB_USER}"
+      DATA_SOURCE_PASS: "${METRICS_DB_PASSWORD}"
+    ports:
+      - "9187:9187"
+    restart:
+      unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    depends_on:
+      - postgres_exporter
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fruits_grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
 
 volumes:
   pg_data:
+  prometheus_data:
+  grafana_data:

@@ -15,12 +15,6 @@ COPY cmd /app/cmd
 COPY scripts /app/scripts
 COPY migrations /app/migrations
 
-RUN chmod +x /app/scripts/entrypoint.sh \
-    /app/scripts/init-test-db.sh \
-    /app/scripts/ci-up-one.sh \
-    /app/scripts/ci-down-one.sh \
-    /app/scripts/seed.sh
-
 RUN chmod +x /app/scripts/*.sh
 
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
