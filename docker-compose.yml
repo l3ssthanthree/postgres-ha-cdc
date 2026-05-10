@@ -1,21 +1,205 @@
 services:
+  etcd1:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: fruits_etcd1
+    hostname: etcd1
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd1
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd1:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd1:2379
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=fruits-etcd-cluster
+      - --enable-v2=false
+    volumes:
+      - etcd1_data:/etcd-data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  etcd2:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: fruits_etcd2
+    hostname: etcd2
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd2
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd2:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd2:2379
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=fruits-etcd-cluster
+      - --enable-v2=false
+    volumes:
+      - etcd2_data:/etcd-data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  etcd3:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: fruits_etcd3
+    hostname: etcd3
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd3
+      - --data-dir=/etcd-data
+      - --initial-advertise-peer-urls=http://etcd3:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd3:2379
+      - --initial-cluster=etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=fruits-etcd-cluster
+      - --enable-v2=false
+    volumes:
+      - etcd3_data:/etcd-data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  patroni1:
+    image: fruits_patroni:latest
+    build:
+      context: .
+      dockerfile: patroni/Dockerfile
+    container_name: fruits_patroni1
+    hostname: patroni1
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/patroni/data
+      PATRONI_NAME: patroni1
+      PATRONI_ETCD3_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni1:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni1:5432
+    depends_on:
+      etcd1:
+        condition: service_healthy
+      etcd2:
+        condition: service_healthy
+      etcd3:
+        condition: service_healthy
+    ports:
+      - "8008:8008"
+    volumes:
+      - pg_data_patroni1:/var/lib/postgresql/patroni
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  patroni2:
+    image: fruits_patroni:latest
+    container_name: fruits_patroni2
+    hostname: patroni2
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/patroni/data
+      PATRONI_NAME: patroni2
+      PATRONI_ETCD3_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni2:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni2:5432
+    depends_on:
+      etcd1:
+        condition: service_healthy
+      etcd2:
+        condition: service_healthy
+      etcd3:
+        condition: service_healthy
+    ports:
+      - "8009:8008"
+    volumes:
+      - pg_data_patroni2:/var/lib/postgresql/patroni
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  patroni3:
+    image: fruits_patroni:latest
+    container_name: fruits_patroni3
+    hostname: patroni3
+    env_file:
+      - .env
+    environment:
+      PGDATA: /var/lib/postgresql/patroni/data
+      PATRONI_NAME: patroni3
+      PATRONI_ETCD3_HOSTS: etcd1:2379,etcd2:2379,etcd3:2379
+      PATRONI_RESTAPI_CONNECT_ADDRESS: patroni3:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: patroni3:5432
+    depends_on:
+      etcd1:
+        condition: service_healthy
+      etcd2:
+        condition: service_healthy
+      etcd3:
+        condition: service_healthy
+    ports:
+      - "8010:8008"
+    volumes:
+      - pg_data_patroni3:/var/lib/postgresql/patroni
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
   db:
-    image: postgres:18-alpine
-    container_name: fruits_postgres
+    image: fruits_haproxy:latest
+    build:
+      context: .
+      dockerfile: haproxy/Dockerfile
+    container_name: fruits_haproxy
+    hostname: db
+    depends_on:
+      patroni1:
+        condition: service_started
+      patroni2:
+        condition: service_started
+      patroni3:
+        condition: service_started
     env_file:
       - .env
     ports:
       - "${POSTGRES_PORT}:5432"
+      - "7000:7000"
     volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./scripts/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
-      - ./scripts/init-metrics-user.sh:/docker-entrypoint-initdb.d/init-metrics-user.sh:ro
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "PGPASSWORD=$${POSTGRES_PASSWORD} psql -h 127.0.0.1 -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB} -tAc 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 60
+      start_period: 180s
 
   migrator:
     build:
@@ -142,7 +326,12 @@ services:
     restart: unless-stopped
 
 volumes:
-  pg_data:
+  etcd1_data:
+  etcd2_data:
+  etcd3_data:
+  pg_data_patroni1:
+  pg_data_patroni2:
+  pg_data_patroni3:
   minio_data:
   backup_state:
   prometheus_data:

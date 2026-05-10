@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
-echo "waiting for db..."
-until pg_isready -h db -p 5432 -U "$POSTGRES_USER"; do
+echo "waiting for db through HAProxy..."
+until pg_isready -h db -p 5432 -U "$POSTGRES_USER" >/dev/null 2>&1; do
   sleep 1
+done
+
+echo "waiting for main database ${POSTGRES_DB}..."
+until psql "$GOOSE_DBSTRING_DOCKER" -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null 2>&1; do
+  sleep 2
+done
+
+echo "waiting for test database ${TEST_POSTGRES_DB}..."
+until psql "$TEST_GOOSE_DBSTRING_DOCKER" -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null 2>&1; do
+  sleep 2
 done
 
 export GOOSE_DRIVER=postgres
