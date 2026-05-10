@@ -1,0 +1,67 @@
+                                                                                                            QUERY PLAN                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=10860.95..10861.00 rows=20 width=73) (actual time=57.936..57.953 rows=20.00 loops=1)
+   Buffers: shared hit=8704
+   ->  Sort  (cost=10860.95..10872.79 rows=4736 width=73) (actual time=57.934..57.948 rows=20.00 loops=1)
+         Sort Key: (sum(ws.qty_available)) DESC, p.id
+         Sort Method: top-N heapsort  Memory: 28kB
+         Buffers: shared hit=8704
+         ->  HashAggregate  (cost=10675.72..10734.92 rows=4736 width=73) (actual time=56.998..57.586 rows=1111.00 loops=1)
+               Group Key: p.id, c.name, latest_price.price
+               Batches: 1  Memory Usage: 401kB
+               Buffers: shared hit=8701
+               ->  Nested Loop  (cost=1942.51..10616.52 rows=4736 width=41) (actual time=32.793..54.143 rows=4170.00 loops=1)
+                     Buffers: shared hit=8701
+                     ->  Hash Join  (cost=1942.21..3572.83 rows=4736 width=36) (actual time=32.731..46.805 rows=4170.00 loops=1)
+                           Hash Cond: (ws.product_id = p.id)
+                           Buffers: shared hit=5368
+                           ->  Seq Scan on warehouse_stock ws  (cost=0.00..1302.00 rows=75000 width=12) (actual time=0.019..5.467 rows=75000.00 loops=1)
+                                 Buffers: shared hit=552
+                           ->  Hash  (cost=1922.47..1922.47 rows=1579 width=32) (actual time=32.687..32.696 rows=1390.00 loops=1)
+                                 Buckets: 2048  Batches: 1  Memory Usage: 107kB
+                                 Buffers: shared hit=4816
+                                 ->  Nested Loop Left Join  (cost=713.69..1922.47 rows=1579 width=32) (actual time=23.916..32.219 rows=1390.00 loops=1)
+                                       Buffers: shared hit=4816
+                                       ->  Hash Join  (cost=713.40..1376.60 rows=1579 width=36) (actual time=23.884..30.107 rows=1390.00 loops=1)
+                                             Hash Cond: (p.category_id = c.id)
+                                             Buffers: shared hit=646
+                                             ->  Hash Right Join  (cost=712.29..1367.83 rows=1579 width=35) (actual time=23.841..29.714 rows=1390.00 loops=1)
+                                                   Hash Cond: (sp.product_id = p.id)
+                                                   Buffers: shared hit=645
+                                                   ->  Seq Scan on supplier_products sp  (cost=0.00..573.50 rows=31250 width=16) (actual time=0.027..2.394 rows=31250.00 loops=1)
+                                                         Buffers: shared hit=261
+                                                   ->  Hash  (cost=696.50..696.50 rows=1263 width=27) (actual time=23.783..23.785 rows=1111.00 loops=1)
+                                                         Buckets: 2048  Batches: 1  Memory Usage: 86kB
+                                                         Buffers: shared hit=384
+                                                         ->  Seq Scan on products p  (cost=0.00..696.50 rows=1263 width=27) (actual time=0.030..23.391 rows=1111.00 loops=1)
+                                                               Filter: ((name)::text ~~* '%Fruit 12%'::text)
+                                                               Rows Removed by Filter: 23889
+                                                               Buffers: shared hit=384
+                                             ->  Hash  (cost=1.05..1.05 rows=5 width=17) (actual time=0.020..0.021 rows=5.00 loops=1)
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=1
+                                                   ->  Seq Scan on categories c  (cost=0.00..1.05 rows=5 width=17) (actual time=0.008..0.010 rows=5.00 loops=1)
+                                                         Buffers: shared hit=1
+                                       ->  Index Scan using supplier_stock_supplier_product_id_key on supplier_stock ss  (cost=0.29..0.35 rows=1 width=12) (actual time=0.001..0.001 rows=1.00 loops=1390)
+                                             Index Cond: (supplier_product_id = sp.id)
+                                             Index Searches: 1390
+                                             Buffers: shared hit=4170
+                     ->  Memoize  (cost=0.30..5.49 rows=1 width=5) (actual time=0.001..0.001 rows=1.00 loops=4170)
+                           Cache Key: p.id
+                           Cache Mode: binary
+                           Hits: 3059  Misses: 1111  Evictions: 0  Overflows: 0  Memory Usage: 119kB
+                           Buffers: shared hit=3333
+                           ->  Subquery Scan on latest_price  (cost=0.29..5.48 rows=1 width=5) (actual time=0.002..0.002 rows=1.00 loops=1111)
+                                 Buffers: shared hit=3333
+                                 ->  Limit  (cost=0.29..5.47 rows=1 width=13) (actual time=0.002..0.002 rows=1.00 loops=1111)
+                                       Buffers: shared hit=3333
+                                       ->  Index Scan using idx_product_price_history_product_id_created_at_desc on product_price_history pph  (cost=0.29..15.83 rows=3 width=13) (actual time=0.002..0.002 rows=1.00 loops=1111)
+                                             Index Cond: (product_id = p.id)
+                                             Index Searches: 1111
+                                             Buffers: shared hit=3333
+ Planning:
+   Buffers: shared hit=393
+ Planning Time: 5.075 ms
+ Execution Time: 58.457 ms
+(63 rows)
+

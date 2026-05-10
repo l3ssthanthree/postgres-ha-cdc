@@ -1,0 +1,78 @@
+                                                                                                      QUERY PLAN                                                                                                      
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=61883.96..61884.01 rows=20 width=72) (actual time=352.865..352.875 rows=20.00 loops=1)
+   Buffers: shared hit=25444
+   ->  Sort  (cost=61883.96..61884.91 rows=379 width=72) (actual time=352.863..352.871 rows=20.00 loops=1)
+         Sort Key: (sum(ws.qty_available)) DESC, p.id
+         Sort Method: top-N heapsort  Memory: 28kB
+         Buffers: shared hit=25444
+         ->  GroupAggregate  (cost=13789.28..61873.88 rows=379 width=72) (actual time=351.956..352.789 rows=111.00 loops=1)
+               Group Key: c.name, p.id, latest_price.price
+               Buffers: shared hit=25441
+               ->  Incremental Sort  (cost=13789.28..61864.40 rows=379 width=40) (actual time=351.938..352.566 rows=420.00 loops=1)
+                     Sort Key: c.name, p.id, latest_price.price
+                     Presorted Key: c.name
+                     Full-sort Groups: 5  Sort Method: quicksort  Average Memory: 28kB  Peak Memory: 28kB
+                     Pre-sorted Groups: 5  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+                     Buffers: shared hit=25441
+                     ->  Nested Loop  (cost=1771.70..61847.73 rows=379 width=40) (actual time=23.707..352.049 rows=420.00 loops=1)
+                           Join Filter: (c.id = p.category_id)
+                           Rows Removed by Join Filter: 1680
+                           Buffers: shared hit=25435
+                           ->  Index Scan using categories_name_key on categories c  (cost=0.13..12.21 rows=5 width=17) (actual time=0.005..0.012 rows=5.00 loops=1)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Materialize  (cost=1771.57..61808.05 rows=379 width=39) (actual time=4.740..70.322 rows=420.00 loops=5)
+                                 Storage: Memory  Maximum Storage: 46kB
+                                 Buffers: shared hit=25433
+                                 ->  Hash Join  (cost=1771.57..61806.15 rows=379 width=39) (actual time=23.690..351.019 rows=420.00 loops=1)
+                                       Hash Cond: (p.id = ws.product_id)
+                                       Buffers: shared hit=25433
+                                       ->  Nested Loop  (cost=875.57..60905.58 rows=126 width=35) (actual time=12.245..339.030 rows=140.00 loops=1)
+                                             Buffers: shared hit=25212
+                                             ->  Nested Loop Left Join  (cost=279.55..585.40 rows=126 width=30) (actual time=8.242..12.675 rows=140.00 loops=1)
+                                                   Buffers: shared hit=678
+                                                   ->  Hash Right Join  (cost=279.26..542.09 rows=126 width=34) (actual time=8.167..11.120 rows=140.00 loops=1)
+                                                         Hash Cond: (sp.product_id = p.id)
+                                                         Buffers: shared hit=258
+                                                         ->  Seq Scan on supplier_products sp  (cost=0.00..230.00 rows=12500 width=16) (actual time=0.133..1.495 rows=12500.00 loops=1)
+                                                               Buffers: shared hit=105
+                                                         ->  Hash  (cost=278.00..278.00 rows=101 width=26) (actual time=7.955..7.956 rows=111.00 loops=1)
+                                                               Buckets: 1024  Batches: 1  Memory Usage: 15kB
+                                                               Buffers: shared hit=153
+                                                               ->  Seq Scan on products p  (cost=0.00..278.00 rows=101 width=26) (actual time=0.051..7.924 rows=111.00 loops=1)
+                                                                     Filter: ((name)::text ~~* '%Fruit 12%'::text)
+                                                                     Rows Removed by Filter: 9889
+                                                                     Buffers: shared hit=153
+                                                   ->  Index Scan using supplier_stock_supplier_product_id_key on supplier_stock ss  (cost=0.29..0.34 rows=1 width=12) (actual time=0.008..0.008 rows=1.00 loops=140)
+                                                         Index Cond: (supplier_product_id = sp.id)
+                                                         Index Searches: 140
+                                                         Buffers: shared hit=420
+                                             ->  Memoize  (cost=596.02..596.04 rows=1 width=5) (actual time=2.328..2.329 rows=1.00 loops=140)
+                                                   Cache Key: p.id
+                                                   Cache Mode: binary
+                                                   Hits: 29  Misses: 111  Evictions: 0  Overflows: 0  Memory Usage: 12kB
+                                                   Buffers: shared hit=24534
+                                                   ->  Subquery Scan on latest_price  (cost=596.01..596.03 rows=1 width=5) (actual time=2.931..2.932 rows=1.00 loops=111)
+                                                         Buffers: shared hit=24534
+                                                         ->  Limit  (cost=596.01..596.02 rows=1 width=13) (actual time=2.930..2.930 rows=1.00 loops=111)
+                                                               Buffers: shared hit=24534
+                                                               ->  Sort  (cost=596.01..596.02 rows=3 width=13) (actual time=2.927..2.927 rows=1.00 loops=111)
+                                                                     Sort Key: pph.created_at DESC
+                                                                     Sort Method: top-N heapsort  Memory: 25kB
+                                                                     Buffers: shared hit=24534
+                                                                     ->  Seq Scan on product_price_history pph  (cost=0.00..596.00 rows=3 width=13) (actual time=0.121..2.911 rows=3.00 loops=111)
+                                                                           Filter: (product_id = p.id)
+                                                                           Rows Removed by Filter: 29997
+                                                                           Buffers: shared hit=24531
+                                       ->  Hash  (cost=521.00..521.00 rows=30000 width=12) (actual time=11.222..11.222 rows=30000.00 loops=1)
+                                             Buckets: 32768  Batches: 1  Memory Usage: 1663kB
+                                             Buffers: shared hit=221
+                                             ->  Seq Scan on warehouse_stock ws  (cost=0.00..521.00 rows=30000 width=12) (actual time=0.032..4.774 rows=30000.00 loops=1)
+                                                   Buffers: shared hit=221
+ Planning:
+   Buffers: shared hit=372
+ Planning Time: 3.512 ms
+ Execution Time: 353.192 ms
+(74 ??????)
+

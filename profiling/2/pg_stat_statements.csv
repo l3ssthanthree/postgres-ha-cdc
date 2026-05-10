@@ -1,0 +1,324 @@
+query,mean_exec_time,calls,shared_blks_hit,shared_blks_read
+"SELECT
+    p.id,
+    p.name,
+    c.name AS category_name,
+    latest_price.price AS current_price,
+    SUM(ws.qty_available) AS total_warehouse_stock,
+    COALESCE(AVG(ss.qty_available), $3) AS avg_supplier_stock
+FROM products p
+JOIN categories c ON c.id = p.category_id
+JOIN warehouse_stock ws ON ws.product_id = p.id
+LEFT JOIN supplier_products sp ON sp.product_id = p.id
+LEFT JOIN supplier_stock ss ON ss.supplier_product_id = sp.id
+JOIN LATERAL (
+    SELECT pph.price
+    FROM product_price_history pph
+    WHERE pph.product_id = p.id
+    ORDER BY pph.created_at DESC
+    LIMIT $4
+) AS latest_price ON $5
+WHERE p.name ILIKE $1
+GROUP BY p.id, p.name, c.name, latest_price.price
+ORDER BY total_warehouse_stock DESC, p.id
+LIMIT $2",5461.986265,68,42910334,11651
+"WITH latest_events AS (
+    SELECT
+        el.order_id,
+        MAX(el.created_at) AS last_event_at
+    FROM order_event_log el
+    GROUP BY el.order_id
+)
+SELECT
+    o.id,
+    o.created_at,
+    u.id AS user_id,
+    u.full_name,
+    os.name AS status_name,
+    COUNT(oi.id) AS items_count,
+    SUM(oi.quantity * oi.sale_price_at_purchase) AS order_total,
+    COALESCE(string_agg(DISTINCT orf.flag_code, $4), $5) AS risk_flags,
+    MAX(le.last_event_at) AS last_event_at,
+    MAX(length(COALESCE(o.special_instructions, $6))) AS note_length,
+    MAX(p.name) AS sample_product_name
+FROM orders o
+JOIN users u ON u.id = o.user_id
+JOIN order_statuses os ON os.id = o.status_id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+LEFT JOIN order_risk_flags orf ON orf.order_id = o.id
+LEFT JOIN latest_events le ON le.order_id = o.id
+WHERE o.created_at >= NOW() - make_interval(days => $1)
+  AND (o.special_instructions IS NULL OR length(o.special_instructions) >= $7)
+GROUP BY o.id, o.created_at, u.id, u.full_name, os.name
+ORDER BY o.created_at DESC
+LIMIT $2 OFFSET $3",1340.388949,280,4365858,839165
+"WITH customer_sales AS (
+    SELECT
+        u.id AS user_id,
+        u.full_name,
+        SUM(oi.quantity * oi.sale_price_at_purchase) AS revenue,
+        COUNT(DISTINCT o.id) AS orders_count,
+        MAX(o.created_at) AS last_order_at
+    FROM users u
+    JOIN orders o ON o.user_id = u.id
+    JOIN order_statuses os ON os.id = o.status_id
+    JOIN order_items oi ON oi.order_id = o.id
+    WHERE o.created_at >= NOW() - make_interval(days => $1)
+      AND os.name <> $3
+    GROUP BY u.id, u.full_name
+),
+ranked AS (
+    SELECT
+        *,
+        dense_rank() OVER (ORDER BY revenue DESC) AS revenue_rank
+    FROM customer_sales
+)
+SELECT
+    user_id,
+    full_name,
+    revenue,
+    orders_count,
+    last_order_at,
+    revenue_rank
+FROM ranked
+WHERE revenue_rank <= $2
+ORDER BY revenue_rank, user_id",445.577219,85,241658,0
+"SELECT
+    date_trunc($3, o.created_at) AS day_bucket,
+    c.name AS category_name,
+    COUNT(DISTINCT o.id) AS orders_count,
+    SUM(oi.quantity) AS items_sold,
+    SUM(oi.quantity * oi.sale_price_at_purchase) AS revenue
+FROM orders o
+JOIN order_statuses os ON os.id = o.status_id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+JOIN categories c ON c.id = p.category_id
+WHERE o.created_at >= NOW() - make_interval(days => $1)
+  AND os.name <> $4
+GROUP BY 1, 2
+ORDER BY day_bucket DESC, revenue DESC
+LIMIT $2",333.122188,90,4283335,164
+"SELECT
+		current_database() datname,
+		schemaname,
+		relname,
+		seq_scan,
+		seq_tup_read,
+		idx_scan,
+		idx_tup_fetch,
+		n_tup_ins,
+		n_tup_upd,
+		n_tup_del,
+		n_tup_hot_upd,
+		n_live_tup,
+		n_dead_tup,
+		n_mod_since_analyze,
+		COALESCE(last_vacuum, $1) as last_vacuum,
+		COALESCE(last_autovacuum, $2) as last_autovacuum,
+		COALESCE(last_analyze, $3) as last_analyze,
+		COALESCE(last_autoanalyze, $4) as last_autoanalyze,
+		vacuum_count,
+		autovacuum_count,
+		analyze_count,
+		autoanalyze_count,
+		pg_indexes_size(relid) as indexes_size,
+		pg_table_size(relid) as table_size
+	FROM
+		pg_stat_user_tables",3.902656,22,19514,220
+"SELECT name, setting, COALESCE(unit, $1), short_desc, vartype FROM pg_settings WHERE vartype IN ($2 /*, ... */) AND name NOT IN ($3 /*, ... */)",2.548120,22,0,0
+"INSERT INTO order_event_log (order_id, event_type, actor_type, payload, created_at)
+SELECT
+    (((series.n + $1) - $4) % $2) + $5,
+    $6,
+    $7,
+    jsonb_build_object(
+        $8, $3,
+        $9, series.n,
+        $10, $1
+    ),
+    NOW() - make_interval(secs => series.n % $11)
+FROM generate_series($12, $3) AS series(n)",2.384750,820,450708,281
+"SELECT
+		current_database() datname,
+		schemaname,
+		relname,
+		heap_blks_read,
+		heap_blks_hit,
+		idx_blks_read,
+		idx_blks_hit,
+		toast_blks_read,
+		toast_blks_hit,
+		tidx_blks_read,
+		tidx_blks_hit
+	FROM pg_statio_user_tables",2.155370,22,5017,43
+SELECT pg_database_size($1),0.818021,110,396,0
+SELECT pg_stat_statements_reset(),0.652675,1,0,0
+"SELECT 
+		  pg_database.datname as datname,
+		  tmp.mode as mode,
+		  COALESCE(count, $1) as count 
+		FROM 
+		  (
+		    VALUES 
+		      ($2), 
+		      ($3), 
+		      ($4), 
+		      ($5), 
+		      ($6), 
+		      ($7), 
+		      ($8), 
+		      ($9), 
+		      ($10)
+		  ) AS tmp(mode)
+		  CROSS JOIN pg_database 
+		  LEFT JOIN (
+		    SELECT 
+		      database, 
+		      lower(mode) AS mode, 
+		      count(*) AS count 
+		    FROM 
+		      pg_locks 
+		    WHERE 
+		      database IS NOT NULL 
+		    GROUP BY 
+		      database, 
+		      lower(mode)
+		  ) AS tmp2 ON tmp.mode = tmp2.mode 
+		  and pg_database.oid = tmp2.database 
+		ORDER BY 
+		  1",0.536377,22,88,0
+"SELECT
+			COUNT(*) AS segments,
+			SUM(size) AS size
+		FROM pg_ls_waldir()
+		WHERE name ~ $1",0.492266,22,0,0
+"SELECT
+				pg_database.datname,
+				tmp.state,
+				tmp2.usename,
+				tmp2.application_name,
+				tmp2.backend_type,
+				tmp2.wait_event_type,
+				tmp2.wait_event,
+				COALESCE(count,$1) as count,
+				COALESCE(max_tx_duration,$2) as max_tx_duration
+			FROM
+				(
+				  VALUES ($3),
+				  		 ($4),
+				  		 ($5),
+				  		 ($6),
+				  		 ($7),
+				  		 ($8)
+				) AS tmp(state) CROSS JOIN pg_database
+			LEFT JOIN
+			(
+				SELECT
+					datname,
+					state,
+					usename,
+					application_name,
+					backend_type,
+					wait_event_type,
+					wait_event,
+					count(*) AS count,
+					MAX(EXTRACT($9 FROM now() - xact_start))::float AS max_tx_duration
+				FROM pg_stat_activity
+				WHERE pid <> pg_backend_pid()
+				GROUP BY datname,state,usename,application_name,backend_type,wait_event_type,wait_event) AS tmp2
+				ON tmp.state = tmp2.state AND pg_database.datname = tmp2.datname",0.430143,22,66,0
+"SELECT *,
+				(case pg_is_in_recovery() when $1 then pg_last_wal_receive_lsn() else pg_current_wal_lsn() end) AS pg_current_wal_lsn,
+				(case pg_is_in_recovery() when $2 then pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_lsn($3))::float else pg_wal_lsn_diff(pg_current_wal_lsn(), pg_lsn($4))::float end) AS pg_current_wal_lsn_bytes,
+				(case pg_is_in_recovery() when $5 then pg_wal_lsn_diff(pg_last_wal_receive_lsn(), replay_lsn)::float else pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)::float end) AS pg_wal_lsn_diff
+			FROM pg_stat_replication",0.427414,22,22,0
+"SELECT pg_catalog.pg_postmaster_start_time(), CASE WHEN pg_catalog.pg_is_in_recovery() THEN $1 ELSE ($2 || pg_catalog.substr(pg_catalog.pg_walfile_name(pg_catalog.pg_current_wal_lsn()), $3, $4))::bit(32)::int END, CASE WHEN pg_catalog.pg_is_in_recovery() THEN $5 ELSE pg_catalog.pg_wal_lsn_diff(pg_catalog.pg_current_wal_flush_lsn(), $6)::bigint END, pg_catalog.pg_wal_lsn_diff(pg_catalog.pg_last_wal_replay_lsn(), $7)::bigint, pg_catalog.pg_wal_lsn_diff(COALESCE(pg_catalog.pg_last_wal_receive_lsn(), $8), $9)::bigint, pg_catalog.pg_is_in_recovery() AND pg_catalog.pg_is_wal_replay_paused(), pg_catalog.pg_last_xact_replay_timestamp(), pg_catalog.pg_wal_lsn_diff(wr.latest_end_lsn, $10)::bigint, wr.status, pg_catalog.current_setting($11), pg_catalog.pg_wal_lsn_diff(wr.written_lsn, $12)::bigint, (SELECT pg_catalog.array_to_json(pg_catalog.array_agg(pg_catalog.row_to_json(ri))) FROM (SELECT (SELECT rolname FROM pg_catalog.pg_authid WHERE oid = usesysid) AS usename, application_name, client_addr, w.state, sync_state, sync_priority FROM pg_catalog.pg_stat_get_wal_senders() w, pg_catalog.pg_stat_get_activity(pid)) AS ri) FROM pg_catalog.pg_stat_get_wal_receiver() AS wr",0.279566,227,454,0
+"WITH current_order AS (
+    SELECT
+        o.id,
+        os.name AS current_status
+    FROM orders o
+    JOIN order_statuses os ON os.id = o.status_id
+    WHERE o.id = $1
+),
+next_status AS (
+    SELECT id
+    FROM order_statuses
+    WHERE name = CASE
+        WHEN (SELECT current_status FROM current_order) = $2 THEN $3
+        WHEN (SELECT current_status FROM current_order) = $4 THEN $5
+        WHEN (SELECT current_status FROM current_order) = $6 THEN $7
+        WHEN (SELECT current_status FROM current_order) = $8 THEN $9
+        WHEN (SELECT current_status FROM current_order) = $10 THEN $11
+        ELSE $12
+    END
+)
+UPDATE orders o
+SET status_id = (SELECT id FROM next_status)
+WHERE o.id = $1
+RETURNING o.id, o.status_id, o.created_at",0.220769,820,13693,25
+"INSERT INTO order_event_log (order_id, event_type, actor_type, payload)
+		VALUES ($1, $3, $4, jsonb_build_object($5, $2::bigint))",0.196366,820,8455,67
+"SELECT CASE WHEN pg_catalog.pg_is_in_recovery() THEN $1 ELSE ($2 || pg_catalog.substr(pg_catalog.pg_walfile_name(pg_catalog.pg_current_wal_lsn()), $3, $4))::bit(32)::int END, CASE WHEN pg_catalog.pg_is_in_recovery() THEN $5 ELSE pg_catalog.pg_wal_lsn_diff(pg_catalog.pg_current_wal_flush_lsn(), $6)::bigint END, pg_catalog.pg_wal_lsn_diff(pg_catalog.pg_last_wal_replay_lsn(), $7)::bigint, pg_catalog.pg_wal_lsn_diff(COALESCE(pg_catalog.pg_last_wal_receive_lsn(), $8), $9)::bigint, pg_catalog.pg_is_in_recovery() AND pg_catalog.pg_is_wal_replay_paused(), $10, CASE WHEN latest_end_lsn IS NULL THEN $11 ELSE received_tli END, pg_catalog.pg_wal_lsn_diff(written_lsn, $12)::bigint, slot_name, conninfo, status, pg_catalog.current_setting($13), (SELECT pg_catalog.json_agg(s.*) FROM (SELECT slot_name, slot_type as type, datoid::bigint, plugin, catalog_xmin, pg_catalog.pg_wal_lsn_diff(confirmed_flush_lsn, $14)::bigint AS confirmed_flush_lsn, pg_catalog.pg_wal_lsn_diff(restart_lsn, $15)::bigint AS restart_lsn, xmin FROM pg_catalog.pg_get_replication_slots() WHERE NOT failover) AS s), $16, $17, $18 FROM pg_catalog.pg_stat_get_wal_receiver()",0.149613,33,0,0
+"SELECT datid,datname,numbackends,xact_commit,xact_rollback,blks_read,blks_hit,tup_returned,tup_fetched,tup_inserted,tup_updated,tup_deleted,conflicts,temp_files,temp_bytes,deadlocks,blk_read_time,blk_write_time,stats_reset,active_time FROM pg_stat_database",0.110512,22,22,0
+"SELECT
+		d.datname,
+		s.relid::regclass::text AS relname,
+		s.param1 AS phase,
+		s.param2 AS heap_blks_total,
+		s.param3 AS heap_blks_scanned,
+		s.param4 AS heap_blks_vacuumed,
+		s.param5 AS index_vacuum_count,
+		s.param6 AS max_dead_tuples,
+		s.param7 AS num_dead_tuples
+	FROM
+		pg_stat_get_progress_info($1::text)
+		s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+	LEFT JOIN
+		pg_database d ON s.datid = d.oid",0.099093,22,0,0
+"SELECT slot_name, database, active,
+				(case pg_is_in_recovery() when $1 then pg_wal_lsn_diff(pg_last_wal_receive_lsn(), restart_lsn) else pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) end) as pg_wal_lsn_diff
+			FROM pg_replication_slots",0.069030,22,22,0
+SELECT * FROM pg_stat_database_conflicts,0.048658,22,22,0
+"SELECT
+		slot_name,
+		slot_type,
+		CASE WHEN pg_is_in_recovery() THEN
+		    pg_last_wal_receive_lsn() - $1
+		ELSE
+		    pg_current_wal_lsn() - $2
+		END AS current_wal_lsn,
+		COALESCE(confirmed_flush_lsn, $3) - $4 AS confirmed_flush_lsn,
+		active,
+		safe_wal_size,
+		wal_status
+	FROM pg_replication_slots",0.046513,22,0,0
+"SELECT *,
+				extract($1 from now() - last_archived_time) AS last_archive_age
+			FROM pg_stat_archiver",0.041727,22,0,0
+"SELECT pg_roles.rolname, pg_roles.rolconnlimit FROM pg_roles",0.025371,22,22,0
+"SELECT
+		buffers_clean
+		,maxwritten_clean
+		,buffers_alloc
+		,stats_reset
+	FROM pg_stat_bgwriter",0.023194,22,0,0
+"SELECT
+	CASE
+		WHEN NOT pg_is_in_recovery() THEN $1
+                WHEN pg_last_wal_receive_lsn () = pg_last_wal_replay_lsn () THEN $2
+		ELSE GREATEST ($3, EXTRACT($4 FROM (now() - pg_last_xact_replay_timestamp())))
+	END AS lag,
+	CASE
+		WHEN pg_is_in_recovery() THEN $5
+		ELSE $6
+	END as is_replica,
+	GREATEST ($7, EXTRACT($8 FROM (now() - pg_last_xact_replay_timestamp()))) as last_replay",0.018304,22,0,0
+"SELECT pg_database.datname, pg_database.datconnlimit FROM pg_database",0.017985,22,22,0
+SELECT version(),0.016263,44,0,0
+"SELECT $2 FROM ONLY ""public"".""orders"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",0.013282,50732,250513,268
+SELECT $1,0.009285,64,0,0
+begin,0.001994,820,0,0
+commit,0.001542,820,0,0

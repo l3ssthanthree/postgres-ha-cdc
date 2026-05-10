@@ -4,7 +4,6 @@ set -euo pipefail
 POST_INIT_ENV_FILE=/etc/patroni/post-init.env
 
 if [ -f "${POST_INIT_ENV_FILE}" ]; then
-  # shellcheck disable=SC1091
   source "${POST_INIT_ENV_FILE}"
 fi
 
@@ -56,11 +55,11 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'rewind_user')
 SELECT format('ALTER ROLE %I WITH SUPERUSER LOGIN PASSWORD %L', :'rewind_user', :'rewind_password')
 \gexec
 
-SELECT format('CREATE ROLE %I WITH LOGIN CREATEDB PASSWORD %L', :'app_user', :'app_password')
+SELECT format('CREATE ROLE %I WITH LOGIN CREATEDB SUPERUSER PASSWORD %L', :'app_user', :'app_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user')
 \gexec
 
-SELECT format('ALTER ROLE %I WITH LOGIN CREATEDB PASSWORD %L', :'app_user', :'app_password')
+SELECT format('ALTER ROLE %I WITH LOGIN CREATEDB SUPERUSER PASSWORD %L', :'app_user', :'app_password')
 \gexec
 
 SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'app_user')

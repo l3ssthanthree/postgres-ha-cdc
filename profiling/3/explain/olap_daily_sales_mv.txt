@@ -1,0 +1,19 @@
+                                                                                          QUERY PLAN                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.70..9.71 rows=90 width=40) (actual time=0.078..0.122 rows=90.00 loops=1)
+   Buffers: shared hit=13
+   ->  Incremental Sort  (cost=0.70..73.77 rows=730 width=40) (actual time=0.077..0.113 rows=90.00 loops=1)
+         Sort Key: day_bucket DESC, revenue DESC
+         Presorted Key: day_bucket
+         Full-sort Groups: 3  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+         Buffers: shared hit=13
+         ->  Index Scan Backward using idx_mv_daily_category_sales_day_category on mv_daily_category_sales  (cost=0.28..53.24 rows=730 width=40) (actual time=0.014..0.032 rows=91.00 loops=1)
+               Index Cond: (day_bucket >= date_trunc('day'::text, (now() - '365 days'::interval)))
+               Index Searches: 1
+               Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=118
+ Planning Time: 0.516 ms
+ Execution Time: 0.180 ms
+(15 rows)
+

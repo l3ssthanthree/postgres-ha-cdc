@@ -1,0 +1,93 @@
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=7806.11..7808.81 rows=54 width=163) (actual time=63.136..63.355 rows=20.00 loops=1)
+   Group Key: o.created_at, o.id, u.id, os.name
+   Buffers: shared hit=2973
+   ->  Sort  (cost=7806.11..7806.25 rows=54 width=170) (actual time=63.103..63.231 rows=66.00 loops=1)
+         Sort Key: o.created_at DESC, o.id, u.id, os.name, orf.flag_code
+         Sort Method: quicksort  Memory: 34kB
+         Buffers: shared hit=2973
+         ->  Nested Loop Left Join  (cost=3645.97..7804.56 rows=54 width=170) (actual time=61.331..63.049 rows=66.00 loops=1)
+               Buffers: shared hit=2967
+               ->  Nested Loop Left Join  (cost=3645.53..7785.54 rows=54 width=162) (actual time=61.153..62.456 rows=66.00 loops=1)
+                     Buffers: shared hit=2906
+                     ->  Nested Loop  (cost=3645.23..7716.71 rows=49 width=150) (actual time=61.029..61.935 rows=60.00 loops=1)
+                           Buffers: shared hit=2865
+                           ->  Nested Loop  (cost=3644.95..7701.27 rows=49 width=147) (actual time=60.964..61.187 rows=60.00 loops=1)
+                                 Join Filter: (os.id = o.status_id)
+                                 Rows Removed by Join Filter: 300
+                                 Buffers: shared hit=2685
+                                 ->  Index Scan using order_statuses_name_key on order_statuses os  (cost=0.13..12.22 rows=6 width=16) (actual time=0.005..0.018 rows=6.00 loops=1)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                                 ->  Materialize  (cost=3644.81..7684.76 rows=49 width=147) (actual time=4.967..10.176 rows=60.00 loops=6)
+                                       Storage: Memory  Maximum Storage: 24kB
+                                       Buffers: shared hit=2683
+                                       ->  Nested Loop  (cost=3644.81..7684.52 rows=49 width=147) (actual time=29.792..60.961 rows=60.00 loops=1)
+                                             Buffers: shared hit=2683
+                                             ->  Hash Join  (cost=3644.52..7620.01 rows=49 width=132) (actual time=29.723..60.468 rows=60.00 loops=1)
+                                                   Hash Cond: (oi.order_id = o.id)
+                                                   Buffers: shared hit=2623
+                                                   ->  Seq Scan on order_items oi  (cost=0.00..3300.00 rows=180000 width=33) (actual time=0.030..15.034 rows=180000.00 loops=1)
+                                                         Buffers: shared hit=1500
+                                                   ->  Hash  (cost=3644.32..3644.32 rows=16 width=107) (actual time=27.833..27.948 rows=20.00 loops=1)
+                                                         Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                                         Buffers: shared hit=1123
+                                                         ->  Subquery Scan on o  (cost=3641.74..3644.32 rows=16 width=107) (actual time=27.783..27.917 rows=20.00 loops=1)
+                                                               Filter: ((o.special_instructions IS NULL) OR (length(o.special_instructions) >= 0))
+                                                               Buffers: shared hit=1123
+                                                               ->  Limit  (cost=3641.74..3644.02 rows=20 width=107) (actual time=27.777..27.901 rows=20.00 loops=1)
+                                                                     Buffers: shared hit=1123
+                                                                     ->  Gather Merge  (cost=3641.74..10479.40 rows=59995 width=107) (actual time=27.775..27.895 rows=20.00 loops=1)
+                                                                           Workers Planned: 1
+                                                                           Workers Launched: 1
+                                                                           Buffers: shared hit=1123
+                                                                           ->  Sort  (cost=2641.73..2729.96 rows=35291 width=107) (actual time=23.874..23.877 rows=14.00 loops=2)
+                                                                                 Sort Key: o_1.created_at DESC
+                                                                                 Sort Method: top-N heapsort  Memory: 28kB
+                                                                                 Buffers: shared hit=1123
+                                                                                 Worker 0:  Sort Method: top-N heapsort  Memory: 27kB
+                                                                                 ->  Parallel Seq Scan on orders o_1  (cost=0.00..1702.65 rows=35291 width=107) (actual time=0.024..16.554 rows=30000.00 loops=2)
+                                                                                       Filter: (created_at >= (now() - '365 days'::interval))
+                                                                                       Buffers: shared hit=1085
+                                             ->  Memoize  (cost=0.30..8.06 rows=1 width=23) (actual time=0.007..0.007 rows=1.00 loops=60)
+                                                   Cache Key: o.user_id
+                                                   Cache Mode: logical
+                                                   Hits: 40  Misses: 20  Evictions: 0  Overflows: 0  Memory Usage: 3kB
+                                                   Buffers: shared hit=60
+                                                   ->  Index Scan using users_pkey on users u  (cost=0.29..8.05 rows=1 width=23) (actual time=0.015..0.015 rows=1.00 loops=20)
+                                                         Index Cond: (id = o.user_id)
+                                                         Index Searches: 20
+                                                         Buffers: shared hit=60
+                           ->  Index Scan using products_pkey on products p  (cost=0.29..0.32 rows=1 width=19) (actual time=0.011..0.011 rows=1.00 loops=60)
+                                 Index Cond: (id = oi.product_id)
+                                 Index Searches: 60
+                                 Buffers: shared hit=180
+                     ->  Memoize  (cost=0.30..4.06 rows=1 width=20) (actual time=0.008..0.008 rows=0.35 loops=60)
+                           Cache Key: o.id
+                           Cache Mode: logical
+                           Hits: 40  Misses: 20  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+                           Buffers: shared hit=41
+                           ->  Index Only Scan using order_risk_flags_order_id_flag_code_key on order_risk_flags orf  (cost=0.29..4.05 rows=1 width=20) (actual time=0.020..0.021 rows=0.35 loops=20)
+                                 Index Cond: (order_id = o.id)
+                                 Heap Fetches: 0
+                                 Index Searches: 20
+                                 Buffers: shared hit=41
+               ->  Memoize  (cost=0.43..1.07 rows=1 width=8) (actual time=0.007..0.007 rows=1.00 loops=66)
+                     Cache Key: o.id
+                     Cache Mode: binary
+                     Hits: 46  Misses: 20  Evictions: 0  Overflows: 0  Memory Usage: 3kB
+                     Buffers: shared hit=61
+                     ->  Limit  (cost=0.42..1.06 rows=1 width=8) (actual time=0.019..0.019 rows=1.00 loops=20)
+                           Buffers: shared hit=61
+                           ->  Index Only Scan using idx_order_event_log_order_id_created_at_desc on order_event_log el  (cost=0.42..8.65 rows=13 width=8) (actual time=0.018..0.018 rows=1.00 loops=20)
+                                 Index Cond: (order_id = o.id)
+                                 Heap Fetches: 0
+                                 Index Searches: 20
+                                 Buffers: shared hit=61
+ Planning:
+   Buffers: shared hit=402
+ Planning Time: 2.294 ms
+ Execution Time: 63.674 ms
+(89 rows)
+

@@ -1,3 +1,6 @@
 .env
-data/postgres
-.idea
+data/postgres/
+.idea/
+.gocache/
+.gomodcache/
+*.exe

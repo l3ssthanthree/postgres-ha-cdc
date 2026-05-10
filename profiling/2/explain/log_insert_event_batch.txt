@@ -1,0 +1,13 @@
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Insert on order_event_log  (cost=0.00..2.40 rows=0 width=0) (actual time=3.742..3.743 rows=0.00 loops=1)
+   Buffers: shared hit=227 read=3 dirtied=2 written=1
+   ->  Function Scan on generate_series series  (cost=0.00..2.40 rows=60 width=348) (actual time=0.378..1.409 rows=60.00 loops=1)
+         Buffers: shared hit=71 read=3 dirtied=1
+ Planning:
+   Buffers: shared hit=3
+ Planning Time: 0.349 ms
+ Trigger for constraint order_event_log_order_id_fkey: time=1.971 calls=60
+ Execution Time: 5.851 ms
+(9 ?????)
+

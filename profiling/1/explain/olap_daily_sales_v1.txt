@@ -1,0 +1,59 @@
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=8473.90..8479.49 rows=90 width=65) (actual time=254.530..257.181 rows=90.00 loops=1)
+   Buffers: shared hit=945, temp read=355 written=399
+   ->  Incremental Sort  (cost=8473.90..12200.40 rows=59996 width=65) (actual time=254.528..257.169 rows=90.00 loops=1)
+         Sort Key: (date_trunc('day'::text, o.created_at)) DESC, (sum(((oi.quantity)::numeric * oi.sale_price_at_purchase))) DESC
+         Presorted Key: (date_trunc('day'::text, o.created_at))
+         Full-sort Groups: 3  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+         Buffers: shared hit=945, temp read=355 written=399
+         ->  GroupAggregate  (cost=8473.79..10573.65 rows=59996 width=65) (actual time=252.772..257.086 rows=91.00 loops=1)
+               Group Key: (date_trunc('day'::text, o.created_at)), c.name
+               Buffers: shared hit=939, temp read=355 written=399
+               ->  Sort  (cost=8473.79..8623.78 rows=59996 width=34) (actual time=252.665..253.896 rows=8516.00 loops=1)
+                     Sort Key: (date_trunc('day'::text, o.created_at)) DESC, c.name, o.id
+                     Sort Method: external merge  Disk: 3184kB
+                     Buffers: shared hit=939, temp read=355 written=399
+                     ->  Hash Join  (cost=1282.31..3712.34 rows=59996 width=34) (actual time=16.076..161.592 rows=67767.00 loops=1)
+                           Hash Cond: (p.category_id = c.id)
+                           Buffers: shared hit=933
+                           ->  Hash Join  (cost=1281.19..3270.26 rows=59996 width=33) (actual time=16.035..131.409 rows=67767.00 loops=1)
+                                 Hash Cond: (oi.product_id = p.id)
+                                 Buffers: shared hit=932
+                                 ->  Hash Join  (cost=903.19..2734.70 rows=59996 width=33) (actual time=12.627..99.837 rows=67767.00 loops=1)
+                                       Hash Cond: (o.status_id = os.id)
+                                       Buffers: shared hit=779
+                                       ->  Hash Join  (cost=902.06..2411.09 rows=71994 width=41) (actual time=12.588..81.660 rows=72000.00 loops=1)
+                                             Hash Cond: (oi.order_id = o.id)
+                                             Buffers: shared hit=778
+                                             ->  Seq Scan on order_items oi  (cost=0.00..1320.00 rows=72000 width=25) (actual time=0.010..16.185 rows=72000.00 loops=1)
+                                                   Buffers: shared hit=600
+                                             ->  Hash  (cost=600.38..600.38 rows=24134 width=24) (actual time=12.393..12.396 rows=24000.00 loops=1)
+                                                   Buckets: 32768  Batches: 1  Memory Usage: 1569kB
+                                                   Buffers: shared hit=178
+                                                   ->  Seq Scan on orders o  (cost=0.00..600.38 rows=24134 width=24) (actual time=0.107..6.838 rows=24000.00 loops=1)
+                                                         Filter: (created_at >= (now() - '365 days'::interval))
+                                                         Buffers: shared hit=178
+                                       ->  Hash  (cost=1.07..1.07 rows=5 width=8) (actual time=0.019..0.020 rows=5.00 loops=1)
+                                             Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                             Buffers: shared hit=1
+                                             ->  Seq Scan on order_statuses os  (cost=0.00..1.07 rows=5 width=8) (actual time=0.013..0.014 rows=5.00 loops=1)
+                                                   Filter: ((name)::text <> 'cancelled'::text)
+                                                   Rows Removed by Filter: 1
+                                                   Buffers: shared hit=1
+                                 ->  Hash  (cost=253.00..253.00 rows=10000 width=16) (actual time=3.327..3.328 rows=10000.00 loops=1)
+                                       Buckets: 16384  Batches: 1  Memory Usage: 597kB
+                                       Buffers: shared hit=153
+                                       ->  Seq Scan on products p  (cost=0.00..253.00 rows=10000 width=16) (actual time=0.007..1.361 rows=10000.00 loops=1)
+                                             Buffers: shared hit=153
+                           ->  Hash  (cost=1.05..1.05 rows=5 width=17) (actual time=0.016..0.017 rows=5.00 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                 Buffers: shared hit=1
+                                 ->  Seq Scan on categories c  (cost=0.00..1.05 rows=5 width=17) (actual time=0.009..0.011 rows=5.00 loops=1)
+                                       Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=320
+ Planning Time: 1.828 ms
+ Execution Time: 258.201 ms
+(55 ?????)
+

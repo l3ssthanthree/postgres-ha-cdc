@@ -211,10 +211,35 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      MIGRATION_VERSION: ${MIGRATION_VERSION:-}
+      RUN_SEQWALL: ${RUN_SEQWALL:-false}
+      SEED_COUNT: ${SEED_COUNT:-10}
     volumes:
       - ./migrations:/app/migrations
       - ./scripts:/app/scripts
     restart: "no"
+
+  workload:
+    image: fruits_workload:latest
+    build:
+      context: .
+      dockerfile: workload/Dockerfile
+    container_name: fruits_workload
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      WORKLOAD_PORT: 8080
+      WORKLOAD_DB_DSN: ${GOOSE_DBSTRING_DOCKER}
+    ports:
+      - "${WORKLOAD_PORT}:8080"
+    restart: unless-stopped
 
   postgres_exporter:
     image: prometheuscommunity/postgres-exporter:latest
@@ -222,10 +247,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
-      DATA_SOURCE_URI: "db:5432/postgres?sslmode=disable"
+      DATA_SOURCE_URI: "db:5432/${POSTGRES_DB}?sslmode=disable"
       DATA_SOURCE_USER: "${METRICS_DB_USER}"
       DATA_SOURCE_PASS: "${METRICS_DB_PASSWORD}"
     ports:
@@ -319,9 +346,10 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     volumes:
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards_stage4:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards_stage6:ro
       - grafana_data:/var/lib/grafana
     restart: unless-stopped
 

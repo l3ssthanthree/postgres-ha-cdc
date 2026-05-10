@@ -1,0 +1,59 @@
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=32158.89..32208.89 rows=20000 width=79) (actual time=546.731..546.825 rows=1429.00 loops=1)
+   Sort Key: (dense_rank() OVER w1), customer_sales.user_id
+   Sort Method: quicksort  Memory: 149kB
+   Buffers: shared hit=2849, temp read=1369 written=1372
+   ->  WindowAgg  (cost=30380.13..30730.12 rows=20000 width=79) (actual time=539.472..544.327 rows=1429.00 loops=1)
+         Window: w1 AS (ORDER BY customer_sales.revenue ROWS UNBOUNDED PRECEDING)
+         Run Condition: (dense_rank() OVER w1 <= 20)
+         Storage: Memory  Maximum Storage: 17kB
+         Buffers: shared hit=2846, temp read=1369 written=1372
+         ->  Sort  (cost=30380.12..30430.12 rows=20000 width=71) (actual time=539.431..539.941 rows=1430.00 loops=1)
+               Sort Key: customer_sales.revenue DESC
+               Sort Method: quicksort  Memory: 2019kB
+               Buffers: shared hit=2846, temp read=1369 written=1372
+               ->  Subquery Scan on customer_sales  (cost=26076.61..28951.35 rows=20000 width=71) (actual time=289.959..522.629 rows=20000.00 loops=1)
+                     Buffers: shared hit=2843, temp read=1369 written=1372
+                     ->  GroupAggregate  (cost=26076.61..28951.35 rows=20000 width=71) (actual time=289.957..517.170 rows=20000.00 loops=1)
+                           Group Key: u.id
+                           Buffers: shared hit=2843, temp read=1369 written=1372
+                           ->  Sort  (cost=26076.61..26451.57 rows=149985 width=48) (actual time=289.925..342.138 rows=169413.00 loops=1)
+                                 Sort Key: u.id, o.id
+                                 Sort Method: external merge  Disk: 10952kB
+                                 Buffers: shared hit=2843, temp read=1369 written=1372
+                                 ->  Hash Join  (cost=3593.06..8565.55 rows=149985 width=48) (actual time=42.607..217.860 rows=169413.00 loops=1)
+                                       Hash Cond: (o.user_id = u.id)
+                                       Buffers: shared hit=2843
+                                       ->  Hash Join  (cost=2886.06..7464.77 rows=149985 width=33) (actual time=32.746..157.875 rows=169413.00 loops=1)
+                                             Hash Cond: (o.status_id = os.id)
+                                             Buffers: shared hit=2586
+                                             ->  Hash Join  (cost=2884.93..6657.46 rows=179982 width=41) (actual time=32.711..109.108 rows=180000.00 loops=1)
+                                                   Hash Cond: (oi.order_id = o.id)
+                                                   Buffers: shared hit=2585
+                                                   ->  Seq Scan on order_items oi  (cost=0.00..3300.00 rows=180000 width=17) (actual time=0.012..13.821 rows=180000.00 loops=1)
+                                                         Buffers: shared hit=1500
+                                                   ->  Hash  (cost=2135.00..2135.00 rows=59994 width=32) (actual time=32.431..32.433 rows=60000.00 loops=1)
+                                                         Buckets: 65536  Batches: 1  Memory Usage: 4262kB
+                                                         Buffers: shared hit=1085
+                                                         ->  Seq Scan on orders o  (cost=0.00..2135.00 rows=59994 width=32) (actual time=0.015..18.740 rows=60000.00 loops=1)
+                                                               Filter: (created_at >= (now() - '365 days'::interval))
+                                                               Buffers: shared hit=1085
+                                             ->  Hash  (cost=1.07..1.07 rows=5 width=8) (actual time=0.018..0.020 rows=5.00 loops=1)
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=1
+                                                   ->  Seq Scan on order_statuses os  (cost=0.00..1.07 rows=5 width=8) (actual time=0.012..0.014 rows=5.00 loops=1)
+                                                         Filter: ((name)::text <> 'cancelled'::text)
+                                                         Rows Removed by Filter: 1
+                                                         Buffers: shared hit=1
+                                       ->  Hash  (cost=457.00..457.00 rows=20000 width=23) (actual time=9.712..9.713 rows=20000.00 loops=1)
+                                             Buckets: 32768  Batches: 1  Memory Usage: 1339kB
+                                             Buffers: shared hit=257
+                                             ->  Seq Scan on users u  (cost=0.00..457.00 rows=20000 width=23) (actual time=0.017..2.535 rows=20000.00 loops=1)
+                                                   Buffers: shared hit=257
+ Planning:
+   Buffers: shared hit=274
+ Planning Time: 1.785 ms
+ Execution Time: 549.446 ms
+(55 ?????)
+

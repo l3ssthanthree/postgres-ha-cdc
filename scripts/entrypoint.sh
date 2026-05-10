@@ -23,12 +23,16 @@ export GOOSE_MIGRATION_DIR=/app/migrations
 echo "validating migrations..."
 goose validate
 
-echo "running seqwall staircase on test db..."
-/go/bin/seqwall staircase \
-  --postgres-url "$TEST_GOOSE_DBSTRING_DOCKER" \
-  --migrations-path /app/migrations \
-  --upgrade "/app/scripts/ci-up-one.sh {current_migration}" \
-  --downgrade "/app/scripts/ci-down-one.sh {current_migration}"
+if [ "${RUN_SEQWALL:-false}" = "true" ]; then
+  echo "running seqwall staircase on test db..."
+  /go/bin/seqwall staircase \
+    --postgres-url "$TEST_GOOSE_DBSTRING_DOCKER" \
+    --migrations-path /app/migrations \
+    --upgrade "/app/scripts/ci-up-one.sh {current_migration}" \
+    --downgrade "/app/scripts/ci-down-one.sh {current_migration}"
+else
+  echo "RUN_SEQWALL!=true, skipping seqwall staircase"
+fi
 
 echo "running migrations on main db..."
 if [ -n "$MIGRATION_VERSION" ]; then

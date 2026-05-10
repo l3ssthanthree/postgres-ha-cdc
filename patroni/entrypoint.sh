@@ -92,6 +92,10 @@ bootstrap:
       remove_data_directory_on_rewind_failure: true
       remove_data_directory_on_diverged_timelines: true
       parameters:
+        shared_preload_libraries: pg_stat_statements
+        compute_query_id: auto
+        pg_stat_statements.max: 10000
+        pg_stat_statements.track: all
         wal_level: replica
         hot_standby: "on"
         wal_keep_size: 512MB
@@ -125,6 +129,7 @@ bootstrap:
       options:
         - login
         - createdb
+        - superuser
 
   post_init: /usr/local/bin/patroni-post-init.sh
 
@@ -165,6 +170,10 @@ postgresql:
   parameters:
     unix_socket_directories: /var/run/postgresql
     listen_addresses: '*'
+    shared_preload_libraries: pg_stat_statements
+    compute_query_id: auto
+    pg_stat_statements.max: 10000
+    pg_stat_statements.track: all
     wal_level: replica
     hot_standby: "on"
     wal_keep_size: 512MB

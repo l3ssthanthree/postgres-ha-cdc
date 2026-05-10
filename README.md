@@ -188,7 +188,7 @@ docker compose start patroni1
 docker compose exec patroni2 patronictl -c /etc/patroni/patroni.yml list
 ```
 
-### Troubleshooting
+### Диагностика
 
 Если один из узлов Patroni после неудачного bootstrap уходит в цикл с ошибкой `system ID mismatch`, значит в его томе остались данные от старого кластера. Для локальной переинициализации конкретного узла можно очистить только его том и поднять сервис заново:
 

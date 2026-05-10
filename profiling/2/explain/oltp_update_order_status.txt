@@ -1,0 +1,47 @@
+                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on orders o  (cost=10.98..19.00 rows=1 width=14) (actual time=0.204..0.208 rows=1.00 loops=1)
+   Buffers: shared hit=27 read=2 dirtied=1
+   CTE current_order
+     ->  Nested Loop  (cost=0.29..9.44 rows=1 width=16) (actual time=0.008..0.010 rows=1.00 loops=1)
+           Join Filter: (os.id = o_1.status_id)
+           Rows Removed by Join Filter: 3
+           Buffers: shared hit=4
+           ->  Index Scan using orders_pkey on orders o_1  (cost=0.29..8.31 rows=1 width=16) (actual time=0.004..0.005 rows=1.00 loops=1)
+                 Index Cond: (id = 100)
+                 Index Searches: 1
+                 Buffers: shared hit=3
+           ->  Seq Scan on order_statuses os  (cost=0.00..1.06 rows=6 width=16) (actual time=0.001..0.001 rows=4.00 loops=1)
+                 Buffers: shared hit=1
+   InitPlan 7
+     ->  Seq Scan on order_statuses  (cost=0.10..1.25 rows=1 width=8) (actual time=0.026..0.028 rows=1.00 loops=1)
+           Filter: ((name)::text = CASE WHEN (((InitPlan 2).col1)::text = 'new'::text) THEN 'paid'::text WHEN (((InitPlan 3).col1)::text = 'paid'::text) THEN 'processing'::text WHEN (((InitPlan 4).col1)::text = 'processing'::text) THEN 'shipped'::text WHEN (((InitPlan 5).col1)::text = 'shipped'::text) THEN 'delivered'::text WHEN (((InitPlan 6).col1)::text = 'delivered'::text) THEN 'delivered'::text ELSE 'cancelled'::text END)
+           Rows Removed by Filter: 5
+           Buffers: shared hit=5
+           InitPlan 2
+             ->  CTE Scan on current_order  (cost=0.00..0.02 rows=1 width=516) (actual time=0.013..0.014 rows=1.00 loops=1)
+                   Storage: Memory  Maximum Storage: 17kB
+                   Buffers: shared hit=4
+           InitPlan 3
+             ->  CTE Scan on current_order current_order_1  (cost=0.00..0.02 rows=1 width=516) (actual time=0.000..0.001 rows=1.00 loops=1)
+                   Storage: Memory  Maximum Storage: 17kB
+           InitPlan 4
+             ->  CTE Scan on current_order current_order_2  (cost=0.00..0.02 rows=1 width=516) (actual time=0.000..0.000 rows=1.00 loops=1)
+                   Storage: Memory  Maximum Storage: 17kB
+           InitPlan 5
+             ->  CTE Scan on current_order current_order_3  (cost=0.00..0.02 rows=1 width=516) (actual time=0.000..0.000 rows=1.00 loops=1)
+                   Storage: Memory  Maximum Storage: 17kB
+           InitPlan 6
+             ->  CTE Scan on current_order current_order_4  (cost=0.00..0.02 rows=1 width=516) (never executed)
+                   Storage: Memory  Maximum Storage: 17kB
+   ->  Index Scan using orders_pkey on orders o  (cost=0.29..8.31 rows=1 width=14) (actual time=0.071..0.072 rows=1.00 loops=1)
+         Index Cond: (id = 100)
+         Index Searches: 1
+         Buffers: shared hit=11
+ Planning:
+   Buffers: shared hit=229
+ Planning Time: 0.922 ms
+ Trigger for constraint orders_status_id_fkey: time=0.150 calls=1
+ Execution Time: 0.508 ms
+(43 ??????)
+
