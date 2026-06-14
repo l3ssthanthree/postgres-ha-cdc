@@ -13,6 +13,11 @@ fi
 : "${TEST_POSTGRES_DB:?TEST_POSTGRES_DB is required}"
 : "${METRICS_DB_USER:?METRICS_DB_USER is required}"
 : "${METRICS_DB_PASSWORD:?METRICS_DB_PASSWORD is required}"
+: "${DEBEZIUM_DB_USER:=fruits_debezium}"
+: "${DEBEZIUM_DB_PASSWORD:=debezium_password}"
+: "${METABASE_DB_NAME:=metabase}"
+: "${METABASE_DB_USER:=metabase}"
+: "${METABASE_DB_PASSWORD:=metabase_password}"
 : "${PATRONI_SUPERUSER_USERNAME:=postgres}"
 : "${PATRONI_SUPERUSER_PASSWORD:?PATRONI_SUPERUSER_PASSWORD is required}"
 : "${PATRONI_REPLICATION_USERNAME:=replicator}"
@@ -37,7 +42,12 @@ psql -v ON_ERROR_STOP=1 \
   -v app_db="${POSTGRES_DB}" \
   -v test_db="${TEST_POSTGRES_DB}" \
   -v metrics_user="${METRICS_DB_USER}" \
-  -v metrics_password="${METRICS_DB_PASSWORD}" <<'SQL'
+  -v metrics_password="${METRICS_DB_PASSWORD}" \
+  -v debezium_user="${DEBEZIUM_DB_USER}" \
+  -v debezium_password="${DEBEZIUM_DB_PASSWORD}" \
+  -v metabase_db="${METABASE_DB_NAME}" \
+  -v metabase_user="${METABASE_DB_USER}" \
+  -v metabase_password="${METABASE_DB_PASSWORD}" <<'SQL'
 SELECT format('ALTER ROLE %I WITH LOGIN SUPERUSER PASSWORD %L', :'superuser', :'superuser_password')
 \gexec
 
@@ -46,6 +56,13 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'replication_user')
 \gexec
 
 SELECT format('ALTER ROLE %I WITH REPLICATION LOGIN PASSWORD %L', :'replication_user', :'replication_password')
+\gexec
+
+SELECT format('CREATE ROLE %I WITH REPLICATION LOGIN PASSWORD %L', :'debezium_user', :'debezium_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'debezium_user')
+\gexec
+
+SELECT format('ALTER ROLE %I WITH REPLICATION LOGIN PASSWORD %L', :'debezium_user', :'debezium_password')
 \gexec
 
 SELECT format('CREATE ROLE %I WITH SUPERUSER LOGIN PASSWORD %L', :'rewind_user', :'rewind_password')
@@ -70,6 +87,20 @@ SELECT format('CREATE DATABASE %I OWNER %I', :'test_db', :'app_user')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'test_db')
 \gexec
 
+SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L', :'metabase_user', :'metabase_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'metabase_user')
+\gexec
+
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'metabase_user', :'metabase_password')
+\gexec
+
+SELECT format('CREATE DATABASE %I OWNER %I', :'metabase_db', :'metabase_user')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'metabase_db')
+\gexec
+
+SELECT format('ALTER DATABASE %I OWNER TO %I', :'metabase_db', :'metabase_user')
+\gexec
+
 SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L', :'metrics_user', :'metrics_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'metrics_user')
 \gexec
@@ -79,6 +110,8 @@ SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'metrics_user', :'metrics
 
 GRANT CONNECT ON DATABASE postgres TO :"metrics_user";
 GRANT CONNECT ON DATABASE :"app_db" TO :"metrics_user";
+GRANT CONNECT ON DATABASE :"app_db" TO :"debezium_user";
+GRANT CONNECT ON DATABASE :"metabase_db" TO :"metabase_user";
 GRANT pg_monitor TO :"metrics_user";
 SQL
 

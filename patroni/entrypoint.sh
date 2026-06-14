@@ -14,6 +14,11 @@ set -euo pipefail
 : "${TEST_POSTGRES_DB:?TEST_POSTGRES_DB is required}"
 : "${METRICS_DB_USER:?METRICS_DB_USER is required}"
 : "${METRICS_DB_PASSWORD:?METRICS_DB_PASSWORD is required}"
+: "${DEBEZIUM_DB_USER:=fruits_debezium}"
+: "${DEBEZIUM_DB_PASSWORD:=debezium_password}"
+: "${METABASE_DB_NAME:=metabase}"
+: "${METABASE_DB_USER:=metabase}"
+: "${METABASE_DB_PASSWORD:=metabase_password}"
 
 : "${PATRONI_SUPERUSER_USERNAME:=postgres}"
 : "${PATRONI_SUPERUSER_PASSWORD:?PATRONI_SUPERUSER_PASSWORD is required}"
@@ -50,6 +55,11 @@ for key in \
   TEST_POSTGRES_DB \
   METRICS_DB_USER \
   METRICS_DB_PASSWORD \
+  DEBEZIUM_DB_USER \
+  DEBEZIUM_DB_PASSWORD \
+  METABASE_DB_NAME \
+  METABASE_DB_USER \
+  METABASE_DB_PASSWORD \
   PATRONI_SUPERUSER_USERNAME \
   PATRONI_SUPERUSER_PASSWORD \
   PATRONI_REPLICATION_USERNAME \
@@ -96,7 +106,7 @@ bootstrap:
         compute_query_id: auto
         pg_stat_statements.max: 10000
         pg_stat_statements.track: all
-        wal_level: replica
+        wal_level: logical
         hot_standby: "on"
         wal_keep_size: 512MB
         max_wal_senders: 10
@@ -110,6 +120,8 @@ bootstrap:
   pg_hba:
     - local all all trust
     - host replication ${PATRONI_REPLICATION_USERNAME} 0.0.0.0/0 scram-sha-256
+    - host replication ${DEBEZIUM_DB_USER} 0.0.0.0/0 scram-sha-256
+    - host all ${DEBEZIUM_DB_USER} 0.0.0.0/0 scram-sha-256
     - host all all 127.0.0.1/32 scram-sha-256
     - host all all 0.0.0.0/0 scram-sha-256
 
@@ -164,6 +176,8 @@ postgresql:
   pg_hba:
     - local all all trust
     - host replication ${PATRONI_REPLICATION_USERNAME} 0.0.0.0/0 scram-sha-256
+    - host replication ${DEBEZIUM_DB_USER} 0.0.0.0/0 scram-sha-256
+    - host all ${DEBEZIUM_DB_USER} 0.0.0.0/0 scram-sha-256
     - host all all 127.0.0.1/32 scram-sha-256
     - host all all 0.0.0.0/0 scram-sha-256
 
@@ -174,7 +188,7 @@ postgresql:
     compute_query_id: auto
     pg_stat_statements.max: 10000
     pg_stat_statements.track: all
-    wal_level: replica
+    wal_level: logical
     hot_standby: "on"
     wal_keep_size: 512MB
     max_wal_senders: 10

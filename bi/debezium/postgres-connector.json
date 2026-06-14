@@ -1,0 +1,18 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "plugin.name": "pgoutput",
+  "database.hostname": "db",
+  "database.port": "5432",
+  "database.user": "fruits_debezium",
+  "database.password": "debezium_password",
+  "database.dbname": "fruits_db",
+  "topic.prefix": "fruits",
+  "table.include.list": "public.order_event_log",
+  "slot.name": "fruits_order_event_log_slot",
+  "publication.name": "fruits_order_event_log_publication",
+  "publication.autocreate.mode": "disabled",
+  "snapshot.mode": "when_needed",
+  "tombstones.on.delete": "false",
+  "decimal.handling.mode": "string",
+  "slot.drop.on.stop": "false"
+}
