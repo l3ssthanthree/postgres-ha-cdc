@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.idea
+.vscode
+data
+.gocache
+.gomodcache
+profiling
+docs
+*.exe
+*.log

@@ -1,7 +1,12 @@
+# Local configuration and data
 .env
-data/postgres/
+.env.*
+!.env.example
+data/
 .idea/
+.vscode/
 .gocache/
 .gomodcache/
 *.exe
-metabase/plugins/sample-database.db*
+*.log
+metabase/plugins/*.jar

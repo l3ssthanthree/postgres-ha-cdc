@@ -1,201 +1,171 @@
-# Проектирование базы данных интернет-магазина фруктов
+# PostgreSQL HA & CDC Lab
 
-## 1. Предметная область
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
+![Kafka](https://img.shields.io/badge/Kafka-3.9.1-231F20?logo=apachekafka)
+![ClickHouse](https://img.shields.io/badge/ClickHouse-24.8-FFCC01?logo=clickhouse&logoColor=black)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-В качестве предметной области выбрана информационная система интернет-магазина фруктов.
+Инфраструктурный проект на базе PostgreSQL: кластер с автоматическим выбором primary, резервное копирование в MinIO, профилирование SQL под нагрузкой и поток изменений **PostgreSQL → Debezium → Kafka → ClickHouse → Metabase**.
 
-Система предназначена для продажи фруктов клиентам через сайт, а также для учета поставщиков, закупочных и розничных цен, остатков на складе, заказов, оплат и доставки.
+Предметная область — интернет-магазин фруктов: пользователи, товары, поставщики, складские остатки, заказы, оплаты и доставки. Go-сервис создаёт OLTP/OLAP-нагрузку через HTTP API, чтобы исследовать производительность и поведение базы при отказах.
 
-Цель системы: обеспечить хранение и обработку данных о товарах, поставщиках, ценах, наличии на складах, заказах, оплатах и доставке.
+## Что реализовано
 
-## 2. Функциональные требования
+- **Высокая доступность:** три PostgreSQL-узла под Patroni, три узла etcd для координации и HAProxy как точка подключения к primary.
+- **Работа с данными:** схема в DBML, 12 SQL-миграций Goose и генератор тестовых данных на Go.
+- **Профилирование:** `pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`, k6 и сохранённые результаты трёх этапов нагрузки.
+- **Оптимизация SQL:** составные индексы, переписывание запросов и материализованное представление продаж по дням и категориям.
+- **Резервное копирование:** `pg_dump`, хранение в MinIO, retention, скрипт восстановления и собственный Go-exporter состояния бэкапов.
+- **Наблюдаемость:** Prometheus, PostgreSQL exporter, Grafana-дашборды для базы, бэкапов, SQL и отказоустойчивости.
+- **CDC и аналитика:** Debezium захватывает изменения `order_event_log`; ClickHouse Kafka Engine и materialized view обрабатывают snapshot, INSERT, UPDATE и DELETE; BI views предназначены для Metabase.
+- **Сценарии отказов:** инструкции для проверки отказа primary и потери DCS с помощью Pumba.
 
-Система должна обеспечивать следующие возможности:
+## Архитектура
 
-1. Хранение данных о пользователях системы
-2. Хранение контактных данных пользователей, включая номер телефона
-3. Хранение адресов доставки пользователей
-4. Хранение данных о поставщиках
-5. Хранение каталога фруктов, доступных в магазине
-6. Хранение ассортимента товаров, предоставляемых каждым поставщиком
-7. Хранение закупочной цены товара у поставщика
-8. Хранение истории изменения цены товара, устанавливаемой администратором
-9. Хранение информации о наличии товара на складе поставщика
-10. Хранение информации о наличии товара на складе интернет-магазина
-11. Возможность оформления клиентом заказа на один или несколько товаров
-12. Хранение состава заказа с указанием количества каждого товара
-13. Фиксация цены товара на момент оформления заказа
-14. Хранение статуса заказа
-15. Хранение информации об оплате заказа
-16. Хранение информации о доставке заказа
+```mermaid
+flowchart LR
+    Client[Go workload / SQL client] --> Proxy[HAProxy]
+    Proxy --> Cluster[PostgreSQL x3 / Patroni]
+    Cluster <--> DCS[etcd x3]
+    Cluster -->|Logical replication| Connect[Debezium / Kafka Connect]
+    Connect --> Kafka[Kafka / KRaft]
+    Kafka --> CH[ClickHouse / Kafka Engine]
+    CH --> BI[Metabase]
+    Proxy --> Backup[pg_dump / backup service]
+    Backup --> S3[MinIO]
+    Cluster --> Exporter[PostgreSQL exporter]
+    Exporter --> Prom[Prometheus]
+    Backup --> Prom
+    S3 --> Prom
+    Proxy --> Prom
+    Prom --> Grafana[Grafana]
+```
 
-## 3. Бизнес-правила
+HAProxy выбирает primary по REST API Patroni. Debezium подключается через тот же адрес `db:5432`. В ClickHouse хранятся версии событий, а BI views выбирают актуальную версию и исключают удалённые записи.
 
-1. Один и тот же товар может поставляться несколькими поставщиками.
-2. Для каждого товара хранится история изменения цены.
-3. Остатки товара на складе поставщика и на складе интернет-магазина учитываются раздельно.
-4. Один пользователь может иметь несколько адресов доставки.
-5. Один пользователь может оформить несколько заказов.
-6. Один заказ должен принадлежать только одному пользователю.
-7. Один заказ может содержать несколько позиций.
-8. Каждая позиция заказа относится только к одному товару.
-9. Для каждой позиции заказа фиксируются количество товара и цена продажи на момент оформления заказа.
-10. После оформления заказа информация о цене в заказе не изменяется, даже если текущая цена товара изменится.
-11. Каждый заказ имеет статус, отражающий этап его обработки.
-12. Оплата связана с конкретным заказом.
-13. Доставка связана с конкретным заказом и выполняется по одному из адресов пользователя.
-14. Заказ может быть передан в доставку только после успешной оплаты.
+## Быстрый запуск
 
-## 4. Описание модели данных
-
-Выделены следующие сущности:
-
-- `users`: пользователи интернет-магазина
-- `addresses`: адреса доставки пользователей
-- `suppliers`: поставщики товаров
-- `categories`: категории фруктов
-- `products`: товары интернет-магазина
-- `supplier_products`: ассортимент товаров, поставляемых конкретными поставщиками, включая закупочную цену
-- `product_price_history`: история изменения розничной цены товара
-- `warehouses`: склады интернет-магазина
-- `warehouse_stock`: остатки товаров на складах интернет-магазина
-- `supplier_stock`: остатки товаров на стороне поставщика
-- `order_statuses`: справочник статусов заказов
-- `orders`: заказы пользователей
-- `order_items`: товарные позиции внутри заказов
-- `payment_statuses`: справочник статусов оплаты
-- `payments`: информация об оплате заказов
-- `delivery_statuses`: справочник статусов доставки
-- `deliveries`: информация о доставке заказов
-
-## 5. Нормализация схемы
-
-Схема приведена к 3НФ.
-
-1. Все таблицы содержат атомарные атрибуты и не имеют повторяющихся групп.
-
-   Например, список товаров в заказе не хранится в таблице `orders`, а вынесен в отдельную таблицу `order_items`.
-
-2. Все неключевые атрибуты функционально зависят только от первичного ключа таблицы.
-
-   Например, в таблице `products` атрибуты `name`, `description` и `unit` зависят только от `products.id`.
-
-3. Транзитивные зависимости устранены.
-
-   Категории товаров вынесены в таблицу `categories`.
-
-   Статусы заказов, оплат и доставок вынесены в отдельные таблицы `order_statuses`, `payment_statuses`, `delivery_statuses`.
-
-   История изменения цены товаров хранится в таблице `product_price_history`.
-
-   Информация о поставщиках и закупочных ценах вынесена в таблицу `supplier_products`.
-
-4. Связи многие-ко-многим реализованы через промежуточные таблицы.
-
-   `supplier_products` связывает поставщиков и товары.
-
-   `order_items` связывает заказы и товары.
-
-Каждая таблица хранит данные только об одной сущности предметной области. Все зависимости между атрибутами определяются только первичными ключами, что соответствует 3НФ.
-
-## 6. Этап 5: высокая доступность PostgreSQL
-
-Для отказоустойчивости PostgreSQL добавлена схема Patroni + etcd + HAProxy.
-
-`patroni1`, `patroni2`, `patroni3` являются PostgreSQL-узлами под управлением Patroni. Один узел становится primary, остальные работают как replica.
-
-`etcd1`, `etcd2`, `etcd3` образуют кластер etcd. Patroni использует etcd как распределенное хранилище конфигурации и как координатор выборов лидера.
-
-`db` является контейнером HAProxy. Он служит единой точкой входа для подключения к текущему primary на порту `${POSTGRES_PORT}`.
-
-После failover клиент продолжает подключаться к базе через тот же адрес `db:5432`. HAProxy сам переключает подключения на новый primary.
-
-### Запуск проекта
+Нужны Git и Docker с Compose v2 и Linux-контейнерами. На Windows подходит Docker Desktop. Первый запуск собирает Go-приложения и скачивает образы.
 
 ```bash
+git clone https://github.com/l3ssthanthree/postgres-ha-cdc.git
+cd postgres-ha-cdc
+cp .env.example .env
 docker compose up --build -d
+docker compose ps
 ```
 
-### Проверка состояния кластера
+В PowerShell вместо `cp` можно использовать `Copy-Item .env.example .env`.
+
+`.env.example` содержит согласованные **публичные демонстрационные пароли** для локального стенда. Реальный `.env` исключён из Git и Docker build context. Имена CDC-роли, publication, topic и аналитической БД также используются в SQL и конфигурации коннектора: при их изменении обновляй связанные файлы. Миграция `012` задаёт демонстрационный пароль роли `fruits_debezium`, а ClickHouse init SQL — пароль `metabase_ch`.
+
+Дождись завершения `migrator` и готовности Kafka Connect, затем зарегистрируй коннектор:
+
+```powershell
+.\bi\debezium\register.ps1
+```
+
+Для Linux / WSL / Git Bash:
 
 ```bash
-docker compose exec patroni1 patronictl -c /etc/patroni/patroni.yml list
+sh bi/debezium/register.sh
 ```
 
-В результате должен быть показан список узлов Patroni. Один узел должен иметь роль `Leader`, остальные узлы должны иметь роль `Replica`.
-
-Быстрые HTTP-проверки можно сделать и без входа в контейнеры:
+Проверь API и CDC:
 
 ```bash
-curl http://127.0.0.1:8008/primary
-curl http://127.0.0.1:8009/replica
-curl http://127.0.0.1:8010/replica
+curl http://localhost:8080/healthz
+curl http://localhost:8083/connectors/postgres-connector/status
+docker compose exec -T clickhouse clickhouse-client --query "SELECT * FROM fruits_bi.v_bi_order_event_kpi FORMAT Vertical"
 ```
 
-Эндпоинт `/primary` возвращает `200 OK` только на текущем лидере, а `/replica` возвращает `200 OK` на standby-узлах. Состояние backend-ов HAProxy также видно на `http://127.0.0.1:7000/`.
+Если Kafka Connect ещё не готов, повтори регистрацию после проверки `docker compose logs kafka-connect`. Регистрация идемпотентна: скрипт использует `PUT`.
 
-### Проверка подключения через HAProxy
+### Интерфейсы
+
+| Сервис | Адрес / порт | Назначение |
+| --- | --- | --- |
+| PostgreSQL через HAProxy | `localhost:5432` | Подключение к текущему primary |
+| Workload | `http://localhost:8080/healthz` | Проверка Go-сервиса |
+| Grafana | `http://localhost:3000` | Метрики и дашборды |
+| Prometheus | `http://localhost:9090` | Сбор метрик |
+| HAProxy | `http://localhost:7000` | Состояние PostgreSQL backend-ов |
+| Patroni REST API | `localhost:8008`, `8009`, `8010` | Состояние и роли узлов |
+| MinIO Console | `http://localhost:9001` | Резервные копии |
+| Kafka Connect | `http://localhost:8083` | Регистрация и состояние Debezium |
+| Kafka UI | `http://localhost:8084` | Просмотр CDC-топика |
+| ClickHouse HTTP | `http://localhost:8123` | Аналитические запросы |
+| Metabase | `http://localhost:3001` | BI-визуализации |
+
+Логины Grafana и MinIO заданы в `.env.example`. Администратора Metabase создай при первом запуске; настройка подключения к ClickHouse и BI-карточек описана в [руководстве по CDC и BI](bi/README.md). Если ClickHouse отсутствует в списке типов БД Metabase, потребуется совместимый драйвер в `metabase/plugins/`.
+
+## Результаты оптимизации
+
+Ниже приведены **сохранённые измерения учебного стенда**, а не новый запуск. Сравниваются этап 2 с усложнённой схемой/запросами и этап 3 после оптимизации. Значения — p95 длительности HTTP-запросов k6; они зависят от данных, нагрузки и оборудования.
+
+| Сценарий | До, мс | После, мс | Снижение p95 | Изменение |
+| --- | ---: | ---: | ---: | --- |
+| Последние заказы | 1762.37 | 117.01 | 93.4% | Переписывание SQL и индекс по `(order_id, created_at DESC)` |
+| Наличие товара | 6396.91 | 122.70 | 98.1% | Индекс истории цен по `(product_id, created_at DESC)` |
+| Продажи по дням | 494.69 | 38.57 | 92.2% | Материализованное представление |
+
+Исходные JSON, статистика PostgreSQL и планы запросов находятся в [profiling/](profiling/README.md). Там же приведено сравнение всех шести эндпоинтов и отдельная проверка влияния индексов на запись.
+
+## HTTP API нагрузки
+
+| Метод | Путь | Сценарий |
+| --- | --- | --- |
+| GET | `/healthz` | Проверка доступности |
+| GET | `/api/oltp/orders/recent` | Последние заказы с данными связанных таблиц |
+| GET | `/api/oltp/inventory/availability` | Остатки и актуальная цена |
+| POST | `/api/oltp/orders/status` | Обновление статуса заказа |
+| GET | `/api/olap/sales/daily` | Продажи по дням и категориям |
+| GET | `/api/olap/customers/top` | Агрегация по клиентам |
+| POST | `/api/logs/events` | Пакетная запись событий |
+
+Сценарии k6 находятся в [load/k6_script.js](load/k6_script.js); инструкции и параметры — в [отчёте о профилировании](profiling/README.md).
+
+## Проверка failover
 
 ```bash
-PGPASSWORD=wasd psql -h 127.0.0.1 -p 5432 -U fruits_admin -d fruits_db -c "SELECT inet_server_addr(), inet_server_port(), pg_is_in_recovery();"
+docker compose exec -T patroni1 patronictl -c /etc/patroni/patroni.yml list
 ```
 
-Если команда выполняется успешно и `pg_is_in_recovery()` равно `f`, значит HAProxy направляет соединение на текущий primary.
+Определи текущий `Leader`, останови именно его (`docker compose stop patroni1`, если лидер — `patroni1`) и повторно посмотри список через оставшийся узел. Затем проверь подключение к primary через HAProxy и верни остановленный узел командой `docker compose start patroni1`.
 
-### Проверка failover
+Пошаговые команды, метрики и сценарий потери etcd описаны в [chaos/README.md](chaos/README.md). Pumba-сценарии меняют состояние контейнеров; запускай их на этом локальном стенде.
 
-Сначала нужно посмотреть, какой узел сейчас является primary:
+## Структура
 
-```bash
-docker compose exec patroni1 patronictl -c /etc/patroni/patroni.yml list
+```text
+patroni/             PostgreSQL + Patroni image и bootstrap
+haproxy/             маршрутизация к primary и метрики
+migrations/          схема, индексы, materialized view и CDC publication
+cmd/seed/            генератор тестовых данных на Go
+workload/            Go HTTP-сервис и SQL для нагрузки
+load/                сценарии k6
+profiling/           планы запросов, метрики и отчёт
+backup_exporter/     Go-exporter состояния резервных копий
+scripts/backup/      создание, retention и восстановление бэкапов
+monitoring/          Prometheus и Grafana
+bi/                  Debezium-коннектор, smoke SQL и BI-инструкции
+clickhouse/          обработка CDC и аналитические views
+chaos/               сценарии проверки отказоустойчивости
+docs/                исходное описание модели данных и HA
+schema.dbml          модель данных
 ```
 
-Затем нужно остановить текущий primary. Например, если primary находится на `patroni1`, нужно выполнить:
+## Проверки и границы проекта
 
-```bash
-docker compose stop patroni1
-```
+GitHub Actions выполняет `go vet`, сборку Go-пакетов, проверку JSON, синтаксиса shell-скриптов и `docker compose config`. Эти проверки не запускают весь кластер и не подтверждают end-to-end CDC или failover. Для этого предусмотрены ручные сценарии в `bi/` и `chaos/`.
 
-После остановки primary нужно снова проверить состояние кластера:
+Стенд предназначен для обучения и локальных экспериментов: Kafka состоит из одного брокера, часть Docker-образов использует `latest`, сервисы публикуют порты и используют демонстрационные пароли. У PostgreSQL нет включённого синхронного режима репликации; при отказе primary возможна потеря последних подтверждённых записей. Непрерывность CDC при переключении primary требует отдельной проверки logical slot и позиции WAL.
 
-```bash
-docker compose exec patroni2 patronictl -c /etc/patroni/patroni.yml list
-```
+Обычная остановка: `docker compose down`. Команда `docker compose down -v` дополнительно удаляет данные именованных томов.
 
-Один из оставшихся узлов должен получить роль `Leader`. Это означает, что Patroni выполнил автоматическое переключение.
+## История проекта
 
-После этого нужно проверить, что клиент все еще может работать через HAProxy:
+Автор: **Даниил Казанович** · [GitHub](https://github.com/l3ssthanthree).
 
-```bash
-PGPASSWORD=wasd psql -h 127.0.0.1 -p 5432 -U fruits_admin -d fruits_db -c "CREATE TABLE IF NOT EXISTS ha_check(id bigserial primary key, note text not null, created_at timestamptz default now()); INSERT INTO ha_check(note) VALUES ('after-failover') RETURNING inet_server_addr(), note; SELECT count(*) FROM ha_check;"
-```
-
-Если команда выполнилась успешно, значит failover прошел корректно. PostgreSQL сменил primary, а HAProxy начал направлять подключения на новый primary. Для наглядности можно сравнить адрес из `inet_server_addr()` до и после остановки старого лидера.
-
-### Возврат остановленного узла
-
-После проверки остановленный узел можно вернуть в кластер:
-
-```bash
-docker compose start patroni1
-```
-
-Через некоторое время он должен подключиться обратно как replica.
-
-Проверить это можно командой:
-
-```bash
-docker compose exec patroni2 patronictl -c /etc/patroni/patroni.yml list
-```
-
-### Диагностика
-
-Если один из узлов Patroni после неудачного bootstrap уходит в цикл с ошибкой `system ID mismatch`, значит в его томе остались данные от старого кластера. Для локальной переинициализации конкретного узла можно очистить только его том и поднять сервис заново:
-
-```bash
-docker compose rm -sf patroni1
-docker volume rm m3209_kazanovichdo_pg_data_patroni1
-docker compose up -d patroni1
-```
-
-После этого Patroni заново выполнит `basebackup` с текущего primary и вернет узел в кластер как `Replica`.
+Проект развивался в учебном [репозитории GitLab ИТМО](https://gitlab.sqlwars.ru/dbd26/M3209_KazanovichDO/-/tree/lab1). Эта публикация сохраняет историю коммитов и основана на ветке `lab1`, коммит `c2ac4d4672b9294a09cbb81ac7a01e428af6413b`. В архиве была более ранняя версия `92d5bab`; этап CDC/BI взят из актуального GitLab. Исходное описание предметной области сохранено в [docs/data-model-and-ha.md](docs/data-model-and-ha.md).
